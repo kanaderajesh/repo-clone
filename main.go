@@ -15,21 +15,21 @@ import (
 )
 
 type Repo struct {
-	Name   string `json:"name"`
-	URL    string `json:"url"`
+	Name   string `json:"name"`
+	URL    string `json:"url"`
 	Commit string `json:"commit,omitempty"`
-	Tag    string `json:"tag,omitempty"`
+	Tag    string `json:"tag,omitempty"`
 	Branch string `json:"branch,omitempty"`
 }
 
 type Config struct {
 	GitLabURL string `json:"gitlab_url"`
-	Token     string `json:"token"`
-	RepoFile  string `json:"repo_file"`
+	Token     string `json:"token"`
+	RepoFileURL string `json:"repo_file_url"`
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "gitlab-cloner",
+	Use:   "gitlab-cloner",
 	Short: "CLI tool to clone GitLab repositories",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {
@@ -44,7 +44,14 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to create GitLab client: %v", err)
 		}
-		repos, err := loadRepoList(config.RepoFile)
+
+		// Clone the repo containing repo.json
+		repoDir := "./repo_config"
+		if err := cloneRepoFileRepo(config, repoDir); err != nil {
+			log.Fatalf("Failed to clone repo.json repository: %v", err)
+		}
+		repoFilePath := filepath.Join(repoDir, "repo.json")
+		repos, err := loadRepoList(repoFilePath)
 		if err != nil {
 			log.Fatalf("Failed to load repositories: %v", err)
 		}
@@ -94,11 +101,12 @@ func cloneOrUpdateRepo(repo Repo, config *Config, client *gitlab.Client) error {
 		return nil
 	}
 	cloneURL := fmt.Sprintf("https://oauth2:%s@%s/%s.git", config.Token, strings.TrimPrefix(repo.URL, "https://"))
-	log.Infof("Cloning %s...", repo.Name)
+	log.Infof("Cloning %s from %s", repo.Name, repo.URL)
 	cmd := exec.Command("git", "clone", cloneURL, dir)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
+	log.Infof("Successfully cloned %s", repo.Name)
 	return checkoutVersion(dir, repo)
 }
 
@@ -119,5 +127,6 @@ func checkoutVersion(dir string, repo Repo) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git checkout failed: %w", err)
 	}
+	log.Infof("Checked out %s in repo %s from %s", ref, repo.Name, repo.URL)
 	return nil
 }
